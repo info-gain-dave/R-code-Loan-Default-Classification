@@ -1,0 +1,329 @@
+---
+title: "Statistics CA1"
+author: "David Regan"
+date: "9 April 2019"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---
+Install packages
+---
+```{r include=FALSE, message=FALSE, warning=FALSE, echo=FALSE}
+#install.packages("ggthemes")
+#install.packages("reshape2")
+#install.packages("lemon")
+#install.packages("ROCR")
+#install.packages('caTools')
+#install.packages('corrplot')
+library(corrplot)
+library(ggplot2)
+library(ggthemes)
+library(reshape2)
+library(pander)
+library(dplyr)
+library(tidyverse)
+library(caTools)
+library(ROCR)
+```
+# Can we improve default prediction in the P2P banking sector?
+# A test case using the Prosper Loan Dataset
+
+# 1. Introduction
+Definition: P2P Banking
+
+Peer-to-peer banking is an online system which allows registered members to complete one to one or individual to individual loan transactions. Borrowers and lenders interact directly with one another, bypassing traditional financial institutions. P2P banking most often involves an auction process (Wang, Greiner & Aronson, 2009). Members can offer or request loans for a specific amount and at a specific rate. Block chain technologies are used to store loan contract listings and profiles. Borrowers can be assessed based on various profile statistics such as Credit Score or previous P2P performance. Lenders assess investments based on multiple factors for each individual. Borrowers are attracted by interest rates which are often significantly lower than retail bank offerings. There are many different P2P banking models on the market and hundreds of different P2P banking companies (Malekipirbazar & Aksakalli, 2015).
+
+Credit Default Prediction
+
+Credit default prediction is most often carried out by large financial institutions. Various methods are applied including credit scoring and grading, both for individuals and institutions. Statistical and Machine Learning Models such as Logistic Regression, SVM and Neural Networks can be also used. In P2P banking lenders can see a range of variables for each loan and individual. These factors can be used to construct effective credit-default classifier models. Factors include credit scores and grades which are calculated by the P2P ban and additional factors such as reason for loan, borrower state or district and borrower income and debt levels (Serrano-Cinca, Guti?rrez-Nieto & L?pez-Palacios, 2015).
+In this report data from Prosper Loans an American P2P institution was used to create a credit default classifier.The data is described in the next section. The model constucted is a logistic regression classifier.
+Prosper Loans Dataset for The Prosper Loans Dataset contains approximately 120,000 instances and 40 features related to default prediction. A study was carried out using a dataset form Prosper Loans a leading American P2P institution. A Logisitic Regression Model was built to carry out default classification i.e. will a particular loan listing leading to default, yes or no. As such a target variable with a binary classification was needed.
+
+
+
+# 2. Presentation of Dataset
+Column Names
+There are 81 columns in the dataset and 113937 rows/instances.
+
+```{r include=FALSE, message=FALSE, warning=FALSE, echo=FALSE}
+mydata = read.csv("C:/Users/david/Desktop/Carlow/Statistics CA 1/ProsperLoanData.csv")
+```
+
+```{r  include=FALSE, message=FALSE, warning=FALSE, echo=FALSE}
+cat("Data Overview")
+summary(mydata)
+```
+
+Column Names
+```{r  message=FALSE, warning=FALSE, echo=FALSE}
+cat("Columns/Featues Overview")
+cat("Total number of columns",ncol(mydata))
+cat("Total number of rows",nrow(mydata))
+colnames(mydata)
+cat("The dataset has lots of missing values.")
+```
+# Pre-processing to reshape dataframe
+This is necessary before proceeding to visualization and modelling. This includes reshaping the data and filling null cells with mean values. 
+It was also necessary that each feature be assessed and judged as to whether its inclusion is appropriate. Some features were questionable as there meaning was difficult to ascertain. This is discussed further in the next section.
+
+# Delete Useless and Invalid Columns
+For many features such as "Member" or "LoanKey" it was obvious they should be deleted. However, it was difficult to find a perfect explanation for all the features in the dataset. The following webpage acted as the main guide https://www.prosper.com/Downloads/Services/Documentation/ProsperDataExport_Details.html Columns which were not deemed appropriate as predictors of default were deleted. To be more precise only columns which definitely belong to the original borrower loan listing were included. However, the guide used is old and many deleted features such as "Investors" are likely to also be valid, nontheless i deleted them as i could not be certain.
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+drops <- c('IncomeVerifiable','OpenRevolvingAccounts', 'OpenRevolvingMonthlyPayment', 'InquiriesLast6Months',  'RevolvingCreditBalance', 'LoanKey', 'TotalProsperLoans', 'TotalProsperPaymentsBilled', 'OnTimeProsperPayments','ProsperPaymentsLessThanOneMonthLate', 'BorrowerState','Occupation','Investors','ScorexChangeAtTimeOfListing','Recommendations','InvestmentFromFriendsCount','TotalInquiries','InvestmentFromFriendsAmount','InvestmentFromFriendsCount','LoanOriginationQuarter','GroupKey','LoanOriginationDate', 'LP_GrossPrincipalLoss', 'LP_NetPrincipalLoss', 'ListingKey', 'ListingNumber', 'ListingCreationDate', 'ClosedDate', 'ListingCategory (numeric)', 'CurrentlyInGroup', 'GroupKey', 'DateCreditPulled', 'OpenCreditLines','EmploymentStatus', 'CurrentCreditLines','ProsperPaymentsOneMonthPlusLate', 'ProsperPrincipalBorrowed', 'ProsperPrincipalOutstanding', 'LoanFirstDefaultedCycleNumber', 'LoanMonthsSinceOrigination', 'LoanNumber', 'MemberKey', 'LP_CustomerPayments', 'LP_CustomerPrincipalPayments', 'LP_InterestandFees', 'LP_ServiceFees', 'PercentFunded', 'LP_NonPrincipalRecoverypayments', 'LP_CollectionFees', 'LoanCurrentDaysDelinquent', 'BorrowerRate', 'LenderYield', 'EstimatedEffectiveYield', 'EstimatedLoss', 'EstimatedReturn','FirstRecordedCreditLine')
+
+mydata <- mydata[ , !(names(mydata) %in% drops)]
+```
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+cat("The following columns/features were deleted:")
+for(c in drops){
+  cat("\n",c) }
+cat("\nNumber of columns reduced to",ncol(mydata))
+```
+# Delete Useless Rows
+There are lots of useless instance/rows. Rows were the loan term is not finished. These will not help predict loan default. These rows will be deleted. Only rows were LoanStatus is either "Completed","Defaulted" or "Chargedoff"(a version of default) will be retained. Therefore, we will have only instances of loan repayment completion or default in the dataset to be modelled.
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+loan_status_types = unique(mydata$LoanStatus)
+cat("Initially Column LoanStatus contained",length(loan_status_types),"different values:")
+for(loan_status in loan_status_types){
+  cat("\n",loan_status) }
+cat("Original number of rows =",nrow(mydata))
+mydata<-mydata[!(mydata$LoanStatus=="Completed" & mydata$LoanStatus == "Defaulted" & mydata$LoanStatus == "Chargedoff"),]
+
+loan_status_types = unique(mydata$LoanStatus)
+cat("Column LoanStatus now contains",length(loan_status_types),"different values:\n")
+for(loan_status in loan_status_types){
+  cat(loan_status,"\n") }
+cat("Number of rows reduced to ",nrow(mydata))
+```
+# Create Target(y) Variable Defaulted
+This involves a mapping of values from the "LoanStatus" feature. If "LoanStatus" contains the values "Defaulted" or "Chargedoff" the new target variable will be set as 1. If "LoanStatus" contains the value "Completed" the new target variable will be set to 0. Once this is done the loanStatus column will be deleted.
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+mydata$Defaulted <- ifelse(
+    ( 
+        (mydata$LoanStatus %in% c("Defaulted", "Chargedoff"))
+    ),
+    1,  # if condition is met, put 1
+    0   # else put 0
+)
+cat("New target variable Defaulted created")
+```
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+# Explore New Target Variable Defaulted
+loan_defaulted = unique(mydata$Defaulted)
+cat("Target variable Defaulted is binary. Values 0 or 1")
+for(loan_status in loan_defaulted){
+  cat(loan_status," ") }
+
+# LoanStatus must now be deleted
+mydata <- mydata[ , !(names(mydata) %in% "LoanStatus")]
+cat("Column LoanStatus deleted.\nNumber of columns =",ncol(mydata))
+```
+# Column Datatypes
+```{r  message=FALSE, warning=FALSE, echo=FALSE}
+data_types <- function(frame) {
+  res <- lapply(frame, class)
+  res_frame <- data.frame(unlist(res))
+  barplot(table(res_frame), main="Data Types", col="steelblue", ylab="Number of Features")
+}
+data_types(mydata)
+```
+Most datatypes are numeric with only 4 categorical features remaining.
+
+# Numerics
+Missing values in the numeric columns were replaced with the column average.
+```{r  message=FALSE, warning=FALSE, echo=FALSE}
+mydata <- mydata %>% replace(.=="NULL", NA)
+for(i in 1:ncol(mydata)){
+  mydata[is.na(mydata[,i]), i] <- mean(mydata[,i], na.rm = TRUE)
+}
+```
+
+# Categoricals: the levels are wrong
+Some of the categorical variables stored as factors had incorrect levels.
+```{r  message=FALSE, warning=FALSE, echo=FALSE}
+print("Incorrect Levels: CreditGrade, ProsperRating..Alpha and IncomeRange")
+
+levels(mydata$CreditGrade)
+levels(mydata$ProsperRating..Alpha.)
+levels(mydata$IncomeRange)
+```
+These were changed to the correct levels.
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+mydata$CreditGrade <- factor(mydata$CreditGrade, levels = c("AA", "A", "B", "C","","NC","D","HR"))
+mydata$ProsperRating..Alpha. <- factor(mydata$ProsperRating..Alpha, levels = c("AA", "A", "B", "C","","D","HR"))
+mydata$IncomeRange <- factor(mydata$IncomeRange, levels = c("Not employed", "Not displayed","$0","$1-24,999","$100,000+","$25,000-49,999","$50,000-74,999","$75,000-99,999"))
+levels(mydata$CreditGrade)
+levels(mydata$ProsperRating..Alpha.)
+levels(mydata$IncomeRange)
+
+```
+Debt to income ratio is calculated as an individuals debt level proportional to their stated income. The figure below shows a steep incline as the ratio goes up initially. It then flattens out. However the majority of instances lie in the first or left section of the figure, with debt to income levels below 4. The right-side reduces the impact of the chart. Adjusting the scales would help.
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+ggplot(mydata, aes(x=DebtToIncomeRatio,y = Defaulted)) + geom_point(stat = "identity")+geom_smooth() + ggtitle("Debt to Income V Default") + theme(plot.title = element_text(hjust = 0.5))
+```
+
+Prosper rating alpha is a categorical classifier created by Propser Loans. It is based on previous proper activity and some of the more obvious profiling features such as credit score and the very similar credit grade feature seen in the next chart. 
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+
+def_data <-mydata[!(mydata$ProsperRating..Alpha.== ""),]
+ggplot(def_data, aes(x=ProsperRating..Alpha.,y = Defaulted)) + geom_bar(stat = "identity") + ggtitle("Prosper Rating V Default") + theme(plot.title = element_text(hjust = 0.5))
+```
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+ggplot(mydata, aes(x=CreditGrade,y = Defaulted)) + geom_bar(stat = "identity") + ggtitle("Credit Grade V Default") + theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+There are still some missing values in the categorical features. These will be converted to numeric variables using the factor levels. The missing values can then be assigned the column mean. The predictive variables are now ready to be used in a Logisitic Regression Model.
+```{r  message=FALSE, warning=FALSE, echo=FALSE}
+mydata$CreditGrade <- as.numeric(mydata$CreditGrade)
+mydata$IncomeRange <- as.numeric(mydata$IncomeRange)
+mydata$ProsperRating..Alpha. <- as.numeric(mydata$ProsperRating..Alpha.)
+mydata$IsBorrowerHomeowner <- as.numeric(mydata$IsBorrowerHomeowner)
+mydata <- mydata %>% replace(.=="NULL", NA)
+for(i in 1:ncol(mydata)){
+  mydata[is.na(mydata[,i]), i] <- mean(mydata[,i], na.rm = TRUE)
+}
+summary(mydata)
+```
+# Vizualisations of Correlation
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+correlations <- cor(mydata[,1:14])
+corrplot(correlations, method="circle")
+```
+The chart above is a correlation matrix for 14 of the predictor variables. There are a couple of clusters of highly correlated features. Some of these can be dropped from the Logistic Regression model, this is discussed further below. Their co-linearity makes them redundant. Prosper Rating Numeric, Prosper Rating Alpha, Prosper Score and Borrower APR are clearly heavily correlated.
+
+
+# LOGISTIC REGRESSION
+First, the data must be split into a training and test set. An 80/20 split was used. 80% for training purposes and 20% to test the models accuracy on unseen data. The goal is to create a model or models which generalize to unseen data. 
+
+The dataset is unbalanced approximately 69-70% of the instances are completed, the rest being defaults.  Therefore, the training data must be adjusted to 50/50 between default and completed instances in order to create a useful Logistic regression model.
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+# Create Training Data
+input_ones <- mydata[which(mydata$Defaulted == 1), ]  # 1's
+input_zeros <- mydata[which(mydata$Defaulted == 0), ] # 0's
+set.seed(100)  # for reproducibility
+input_ones_training_rows <- sample(1:nrow(input_ones), 0.8*nrow(input_ones))  # 1's training
+input_zeros_training_rows <- sample(1:nrow(input_zeros), 0.8*nrow(input_ones))  # 0's training. 
+training_ones <- input_ones[input_ones_training_rows, ]  
+training_zeros <- input_zeros[input_zeros_training_rows, ]
+train_set <- rbind(training_ones, training_zeros)  # row bind the 1's and 0's 
+
+# Create Test Data
+test_ones <- input_ones[-input_ones_training_rows, ]
+test_zeros <- input_zeros[-input_zeros_training_rows, ]
+test_set <- rbind(test_ones, test_zeros)# row bind the 1's and 0's 
+
+```
+
+```{r essage=FALSE, warning=FALSE, echo=FALSE}
+#set.seed(9)
+#split <- sample.split(mydata$Defaulted, SplitRatio = 0.80)
+#get training and test data
+#train_set <- subset(mydata, split == TRUE)
+#test_set <- subset(mydata, split == FALSE)
+```
+
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+#logistic regression model
+model <- glm (Defaulted ~ .-Defaulted, data = train_set, family = binomial(link = "logit"))#family = binomial)
+summary(model)
+```
+The residual deviance value of 29359 which is less than the null deviance of 37729 indicates that the model fit is good and should have additional predictive ability.We can see that most of the p-values are small, below 0.05, indicating that the correlation coefficient has significance. Some features such as "AvailableBankcardCredit" and "PublicRecordsLast10Years" have large p-values and can be deleted from the model.
+
+
+
+TRAINING
+Below are the results for the training data, including confusion matrix and accuracy scores.
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+predict <- predict(model, type = 'response')
+#confusion matrix
+cm_train = table(train_set$Defaulted, predict > 0.50)
+cat("\nTraining Results:\n")
+cm_train
+TP = sum(cm_train[,2][2])
+FP = sum(cm_train[,2][1])
+FN = sum(cm_train[,1][2])
+TN = sum(cm_train[,1][1])
+accuracy = (TP + TN)/(TP + TN + FP + FN)
+cat("\nAccuracy = (TP + TN)/(TP + TN + FP + FN)\n")
+cat("Accuracy : ",accuracy)
+precision  = (TP)/(TP + FP)
+cat("\n\nPrecision = (TP)/(TP + FP)\n")
+cat("Precision : ",precision)
+specificity = (TN)/(TN + FP)
+cat("\n\nSpecificity = (TN)/(TN + FP)\n")
+cat("Specificity: ",specificity)
+recall  = (TP)/(TP + FN)
+cat("\n\nRecall = (TP)/(TP + FN)\n")
+cat("Recall : ",recall)
+```
+
+
+ROC Curve: training data
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+#ROC Curve
+ROCRpred <- prediction(predict, train_set$Defaulted)
+ROCRperf <- performance(ROCRpred, 'tpr','fpr')
+plot(ROCRperf, colorize = TRUE, text.adj = c(-0.2,1.7))
+```
+
+
+
+TEST DATA
+Below are the results for the testing data, including confusion matrix and accuracy scores.
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+predictTest = predict(model, type = "response", newdata = test_set)
+cm_test = table(test_set$Defaulted,predictTest >= 0.5)
+cat("\nTest Results:\n")
+cm_test
+TP = sum(cm_test[,2][2])
+FP = sum(cm_test[,2][1])
+FN = sum(cm_test[,1][2])
+TN = sum(cm_test[,1][1])
+accuracy = (TP + TN)/(TP + TN + FP + FN)
+cat("\nAccuracy = (TP + TN)/(TP + TN + FP + FN)\n")
+cat("Accuracy : ",accuracy)
+precision  = (TP)/(TP + FP)
+cat("\n\nPrecision = (TP)/(TP + FP)\n")
+cat("Precision : ",precision)
+specificity = (TN)/(TN + FP)
+cat("\n\nSpecificity = (TN)/(TN + FP)\n")
+cat("Specificity: ",specificity)
+recall  = (TP)/(TP + FN)
+cat("\n\nRecall = (TP)/(TP + FN)\n")
+cat("Recall : ",recall)
+```
+# Conclusions & Recommendations
+The Logistic Regression Model created was of limited success in predicting default classification. The baseline dataset was 69-70% default. The Logistic Regression Classifier has approximately 72-73% accuracy in its test predictions. This is only 3% above the baseline. A detailed iterative feature selection process could improve the model.
+
+I would recommend further research using this dataset. If the validity of more predictor variables could be shown the Logistic Regression Model would likely increase with their addition to the model.
+
+It is also advisable that other Machine Learning Algorithms be used. A Random Forest Classifier or Neural Network should see better results.
+
+The above test case used the relatively small Prosper Loan Dataset. Future work will be carried out on similar but much larger datasets from Lending Club P2P. Additionally, regional macro-economic factors will be sourced and tested. For example, with regards the Prosper Loan Dataset the relevant macro-economic data could be referenced using the feature "State" aka. US State. This feature is in the original dataset but was not used in this study and report. 
+
+# References
+References:
+1. Mach, T., Carter, C. and Slattery, C. (2014). Peer-to-Peer Lending to Small Businesses.SSRN Electronic Journal.
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+cat("\n")
+```
+
+2. Malekipirbazari, M. and Aksakalli, V. (2015). Risk assessment in social lending via random forests.Expert Systems with Applications, 42(10), pp.4621-4631.
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+cat("\n")
+```
+3. Serrano-Cinca, C., Guti?rrez-Nieto, B. and L?pez-Palacios, L. (2015). Determinants of Default in P2P Lending.PLOS ONE, 10(10), p.e0139427.
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+cat("\n")
+```
+4. Wang, H., Greiner, M. and Aronson, J. (2009). People-to-People Lending: The Emerging E-Commerce Transformation of a Financial Market.
